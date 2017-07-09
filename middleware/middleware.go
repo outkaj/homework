@@ -7,7 +7,7 @@ import (
   "log"
   "net/http"
   "strconv"
-  "io"
+  "encoding/hex"
   "net/http/httptest"
   "strings"
   "bytes"
@@ -31,15 +31,6 @@ func ChecksumMiddleware(h http.Handler) http.Handler {
     h_s := rec.Header()
     var buffer1 bytes.Buffer
     var buffer2 bytes.Buffer
-    header_names := []string{"Content-Type", "Date", "Last-Modified", "Server"}
-    for _, item := range header_names {
-      buffer1.WriteString(strings.Join([]string{
-        item,
-        colonspace,
-        h_s.Get(item),
-        crlf,
-    }, ""))
-  }
     for _, x := range h_s.Get("X-Checksum-Headers") {
       buffer2.WriteString(strings.Join([]string{
       string(x),
@@ -47,18 +38,28 @@ func ChecksumMiddleware(h http.Handler) http.Handler {
   }
     b := rec.Body.Bytes()
     body := string(b[:len(b)])
+    header_names := []string{"Content-Type", "Date", "Last-Modified", "Server"}
+    for _, item := range header_names {
+      buffer1.WriteString(strings.Join([]string{
+        item,
+        colonspace + " ",
+        h_s.Get(item),
+        crlf,
+        "X-Checksum-Headers: ",
+        buffer2.String(),
+        crlf + crlf,
+        body,
+    }, ""))
+  }
     canonical := strings.Join([]string{
       code,
       crlf,
       buffer1.String(),
-      buffer2.String(),
-      crlf + crlf,
-      body,
   }, "")
     c := md5.New()
-    io.WriteString(c, canonical)
-    //sum := c.Sum(nil)
-    sum2 := md5.Sum([]byte(canonical))
+    c.Write([]byte(canonical))
+    sum2 := hex.EncodeToString(c.Sum(nil))
+    //sum2 := md5.Sum([]byte(canonical))
     //sumString := string(sum[:])
     sum2String := string(sum2[:])
     // we copy the original headers first
